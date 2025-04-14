@@ -18,40 +18,42 @@ generation_config = {
 }
 model = genai.GenerativeModel('gemini-1.5-flash', generation_config=generation_config)
 
-# Custom CSS for enhanced UI with fixed scrollbar
+# Custom CSS for dark mode UI with fixed scrollbar
 st.markdown("""
     <style>
     body {
+        background-color: #1e293b;
+        color: #e2e8f0;
         overflow-y: auto;
         scrollbar-width: thin;
-        scrollbar-color: #4a90e2 #e0e6ed;
+        scrollbar-color: #60a5fa #334155;
     }
     body::-webkit-scrollbar {
         width: 12px;
     }
     body::-webkit-scrollbar-track {
-        background: #e0e6ed;
+        background: #334155;
         border-radius: 10px;
     }
     body::-webkit-scrollbar-thumb {
-        background: #4a90e2;
+        background: #60a5fa;
         border-radius: 10px;
-        border: 3px solid #e0e6ed;
+        border: 3px solid #334155;
     }
     body::-webkit-scrollbar-thumb:hover {
-        background: #357abd;
+        background: #3b82f6;
     }
     .main {
-        background-color: #ffffff;
+        background-color: #2d3748;
         padding: 30px;
         border-radius: 15px;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+        box-shadow: 0 4px 20px rgba(0,0,0,0.3);
         max-width: 1200px;
         margin: 20px auto;
     }
     .stButton>button {
-        background: linear-gradient(90deg, #4a90e2, #357abd);
-        color: white;
+        background: linear-gradient(90deg, #60a5fa, #3b82f6);
+        color: #ffffff;
         border-radius: 12px;
         padding: 12px 24px;
         font-weight: 600;
@@ -59,59 +61,62 @@ st.markdown("""
         border: none;
     }
     .stButton>button:hover {
-        background: linear-gradient(90deg, #357abd, #4a90e2);
+        background: linear-gradient(90deg, #3b82f6, #60a5fa);
         transform: translateY(-2px);
-        box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        box-shadow: 0 2px 8px rgba(0,0,0,0.4);
     }
     h1 {
-        color: #2c3e50;
+        color: #f1f5f9;
         font-family: 'Helvetica Neue', sans-serif;
         font-size: 2.8em;
         text-align: center;
         margin-bottom: 0.5em;
     }
     h2, h3 {
-        color: #34495e;
+        color: #d1d5db;
         font-family: 'Helvetica Neue', sans-serif;
         margin-top: 1.5em;
     }
     .stTextArea>label, .stNumberInput>label {
         font-weight: 600;
-        color: #34495e;
+        color: #d1d5db;
         font-size: 1.1em;
     }
     .stTextArea textarea {
+        background-color: #374151;
+        color: #e2e8f0;
         border-radius: 10px;
-        border: 2px solid #e0e6ed;
+        border: 2px solid #4b5563;
         transition: border-color 0.3s ease;
     }
     .stTextArea textarea:focus {
-        border-color: #4a90e2;
+        border-color: #60a5fa;
     }
     .stExpander {
-        background-color: #f8fafc;
+        background-color: #374151;
         border-radius: 12px;
-        border: 1px solid #e0e6ed;
-        box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        border: 1px solid #4b5563;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.2);
         padding: 15px;
     }
     .stDataFrame {
-        background-color: #ffffff;
+        background-color: #374151;
         border-radius: 12px;
         padding: 15px;
-        border: 1px solid #e0e6ed;
-        box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        border: 1px solid #4b5563;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.2);
     }
     .card {
-        background-color: #ffffff;
+        background-color: #4b5563;
+        color: #e2e8f0;
         border-radius: 12px;
         padding: 20px;
         margin-bottom: 20px;
-        border: 1px solid #e0e6ed;
+        border: 1px solid #6b7280;
         transition: all 0.3s ease;
     }
     .card:hover {
-        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        box-shadow: 0 4px 15px rgba(0,0,0,0.3);
         transform: translateY(-3px);
     }
     .header-section {
@@ -119,15 +124,28 @@ st.markdown("""
         margin-bottom: 2em;
     }
     .subheader {
-        color: #7f8c8d;
+        color: #94a3b8;
         font-size: 1.2em;
         line-height: 1.6;
     }
     .highlight {
-        background-color: #e8f0fe;
+        background-color: #3b82f6;
         padding: 10px;
         border-radius: 8px;
         margin: 10px 0;
+    }
+    .highlight p, .highlight ul, .highlight li {
+        color: #e2e8f0;
+    }
+    .stSpinner > div > div {
+        border-color: #60a5fa transparent #60a5fa transparent !important;
+    }
+    .stAlert {
+        background-color: #4b5563;
+        color: #e2e8f0;
+    }
+    .stAlert div {
+        color: #e2e8f0 !important;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -201,8 +219,8 @@ def main():
         st.markdown("<h2>Describe Your Company's Needs</h2>", unsafe_allow_html=True)
         st.markdown("""
             <div class='highlight'>
-                <p style='color: #34495e;'>Share your challenges, goals, or expertise needs. Examples include:</p>
-                <ul style='color: #34495e;'>
+                <p>Share your challenges, goals, or expertise needs. Examples include:</p>
+                <ul>
                     <li>Project bottlenecks requiring specific skills</li>
                     <li>New initiatives needing specialized talent</li>
                     <li>Roles to strengthen your team</li>
