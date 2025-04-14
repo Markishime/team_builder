@@ -18,49 +18,29 @@ generation_config = {
 }
 model = genai.GenerativeModel('gemini-1.5-flash', generation_config=generation_config)
 
-# Custom CSS for enhanced UI with dark mode support
+# Custom CSS for enhanced UI with fixed scrollbar
 st.markdown("""
     <style>
-    /* Dark mode support */
-    @media (prefers-color-scheme: dark) {
-        .main {
-            background-color: #1a1a1a;
-            color: #ffffff;
-        }
-        h1, h2, h3 {
-            color: #ffffff;
-        }
-        .stTextArea>label, .stNumberInput>label {
-            color: #ffffff;
-        }
-        .stTextArea textarea {
-            background-color: #2d2d2d;
-            color: #ffffff;
-            border-color: #404040;
-        }
-        .stExpander {
-            background-color: #2d2d2d;
-            border-color: #404040;
-        }
-        .stDataFrame {
-            background-color: #2d2d2d;
-            border-color: #404040;
-        }
-        .card {
-            background-color: #2d2d2d;
-            border-color: #404040;
-            color: #ffffff;
-        }
-        .subheader {
-            color: #b0b0b0;
-        }
-        .highlight {
-            background-color: #2d2d2d;
-            color: #ffffff;
-        }
+    body {
+        overflow-y: auto;
+        scrollbar-width: thin;
+        scrollbar-color: #4a90e2 #e0e6ed;
     }
-
-    /* Light mode styles */
+    body::-webkit-scrollbar {
+        width: 12px;
+    }
+    body::-webkit-scrollbar-track {
+        background: #e0e6ed;
+        border-radius: 10px;
+    }
+    body::-webkit-scrollbar-thumb {
+        background: #4a90e2;
+        border-radius: 10px;
+        border: 3px solid #e0e6ed;
+    }
+    body::-webkit-scrollbar-thumb:hover {
+        background: #357abd;
+    }
     .main {
         background-color: #ffffff;
         padding: 30px;
