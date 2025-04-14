@@ -140,12 +140,30 @@ def cache_result(key, func, *args):
         st.session_state[key] = func(*args)
     return st.session_state[key]
 
+# Function to download and save logo
+def ensure_logo_exists():
+    logo_path = "team_builder_logo.png"
+    if not os.path.exists(logo_path):
+        logo_url = "https://img.freepik.com/free-vector/business-team-putting-together-jigsaw-puzzle-isolated-flat-vector-illustration-cartoon-partners-working-connection-teamwork-partnership-cooperation-concept_74855-9814.jpg"
+        try:
+            response = requests.get(logo_url)
+            if response.status_code == 200:
+                with open(logo_path, 'wb') as f:
+                    f.write(response.content)
+        except Exception as e:
+            st.error(f"Failed to download logo: {str(e)}")
+            return False
+    return True
+
 # Header and introduction
 col1, col2, col3 = st.columns([2,5.5,2])
 with col1:
     st.write(' ')
 with col2:
-    st.image("Connext_Logo.png", width=400)
+    if ensure_logo_exists():
+        st.image("team_builder_logo.png", width=400)
+    else:
+        st.write("# Team Builder")
 with col3:
     st.write(' ')
     
@@ -153,21 +171,19 @@ st_lottie(welcome_animation, height=200, key="welcome_animation")
 
 st.write("""
 <div style="text-align: center;">
-    <h1>Connext Team Builder</h1>
+    <h1>Smart Team Builder</h1>
     <p>
-    Connext Global Solutions specializes in providing full-service offshore staffing and custom-built team solutions.
-    They offer recruiting, payroll, compliance, IT, facilities, and management support to help businesses build high-performing global teams.
-    Services cater to various industries and functions, emphasizing customizing teams based on specific client needs.
-    Their approach involves assessing, recruiting, training, and managing offshore staff to ensure optimal performance and alignment with client objectives.
-    They also provide continuous support and performance monitoring to ensure the offshore team meets and exceeds client expectations. With a focus on cost-efficiency and high-quality talent, Connext Global Solutions enables companies to scale effectively while maintaining control over their operations.
-    <a href="https://connextglobal.com/">Connext Global Solutions</a>
+    Welcome to Smart Team Builder, your intelligent assistant for building high-performing teams. 
+    This tool helps you identify the right roles and expertise needed for your projects and business goals.
+    We analyze your needs and provide recommendations for team composition while comparing costs across different regions.
+    Our goal is to help you build the most effective team while optimizing your resources.
     </p>
 </div>
 """, unsafe_allow_html=True)
 
 st.markdown("""
 <div style="text-align: center;">
-    <h3>Help Us Help You Find the Right Talent</h3>
+    <h3>Help Us Build Your Perfect Team</h3>
     <p>Please describe the challenges, needs, or goals your company is currently facing. For example:</p>
     <ul style="text-align: left; display: inline-block;">
         <li>Are there any specific project bottlenecks?</li>
@@ -416,9 +432,9 @@ if st.session_state["job_list_salary"]:
         st.divider()
 
         # Refined job role list with cost difference and savings information
-        st.markdown("### Job Role List with Cost Difference and Savings Information when hiring through Connext Global Solutions")
+        st.markdown("### Job Role List with Cost Difference and Savings Information")
 
-        refined_df = df[["job_role", "philippines_total_cost", "united_states_total_cost","connext_total_cost", "total_savings"]]
+        refined_df = df[["job_role", "philippines_total_cost", "united_states_total_cost", "total_savings"]]
         st.write(refined_df)
 
         buffer = io.BytesIO()
@@ -426,7 +442,7 @@ if st.session_state["job_list_salary"]:
         st.download_button(
             label="Download refined data as CSV",
             data=buffer,
-            file_name='refined_team_builder_report.csv',
+            file_name='team_builder_report.csv',
             mime='text/csv',
         )
 
@@ -437,10 +453,9 @@ if st.session_state["job_list_salary"]:
 
         st.write(f"**Total Cost if Hiring in the Philippines:** ${total_philippines_cost:,.2f}")
         st.write(f"**Total Cost if Hiring in the United States:** ${total_united_states_cost:,.2f}")
-        st.write(f"**Total Cost if Hiring through Connext Global Solutions:** ${connext_total_cost:,.2f}")
-        st.write(f"**Total Savings if Hiring through Connext Global Solutions:** ${total_savings:,.2f}")
+        st.write(f"**Potential Total Savings:** ${total_savings:,.2f}")
 
         st.markdown("""
-        *By hiring through Connext Global Solutions, you can achieve significant cost savings while maintaining high-quality talent and operational control.*
+        *By strategically building your team across different regions, you can achieve significant cost savings while maintaining high-quality talent and operational control.*
         """)
         st_lottie(congratulations_animation, height=200, key="congratulations_animation")
