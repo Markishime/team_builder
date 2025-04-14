@@ -1,343 +1,340 @@
 import streamlit as st
 import pandas as pd
 import google.generativeai as genai
-import ast
 import json
 import re
 import io
-from streamlit_lottie import st_lottie
 import requests
-import os
 import hashlib
+import time
 
-# Configure Google Generative AI
+# Configure Gemini API
 genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
-
 generation_config = {
-  "temperature": 1,
-  "top_p": 0.95,
-  "top_k": 64,
-  "max_output_tokens": 8192,
-  "response_mime_type": "application/json"
+    "temperature": 0.7,
+    "top_p": 0.9,
+    "top_k": 40,
+    "max_output_tokens": 2048
 }
+model = genai.GenerativeModel('gemini-1.5-flash', generation_config=generation_config)
 
-# Using `response_mime_type` requires one of the Gemini 1.5 Pro or 1.5 Flash models
-model = genai.GenerativeModel('gemini-1.5-flash',
-                              generation_config=generation_config)
+# Custom CSS for enhanced UI with fixed scrollbar
+st.markdown("""
+    <style>
+    body {
+        overflow-y: auto;
+        scrollbar-width: thin;
+        scrollbar-color: #4a90e2 #e0e6ed;
+    }
+    body::-webkit-scrollbar {
+        width: 12px;
+    }
+    body::-webkit-scrollbar-track {
+        background: #e0e6ed;
+        border-radius: 10px;
+    }
+    body::-webkit-scrollbar-thumb {
+        background: #4a90e2;
+        border-radius: 10px;
+        border: 3px solid #e0e6ed;
+    }
+    body::-webkit-scrollbar-thumb:hover {
+        background: #357abd;
+    }
+    .main {
+        background-color: #ffffff;
+        padding: 30px;
+        border-radius: 15px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+        max-width: 1200px;
+        margin: 20px auto;
+    }
+    .stButton>button {
+        background: linear-gradient(90deg, #4a90e2, #357abd);
+        color: white;
+        border-radius: 12px;
+        padding: 12px 24px;
+        font-weight: 600;
+        transition: all 0.3s ease;
+        border: none;
+    }
+    .stButton>button:hover {
+        background: linear-gradient(90deg, #357abd, #4a90e2);
+        transform: translateY(-2px);
+        box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+    h1 {
+        color: #2c3e50;
+        font-family: 'Helvetica Neue', sans-serif;
+        font-size: 2.8em;
+        text-align: center;
+        margin-bottom: 0.5em;
+    }
+    h2, h3 {
+        color: #34495e;
+        font-family: 'Helvetica Neue', sans-serif;
+        margin-top: 1.5em;
+    }
+    .stTextArea>label, .stNumberInput>label {
+        font-weight: 600;
+        color: #34495e;
+        font-size: 1.1em;
+    }
+    .stTextArea textarea {
+        border-radius: 10px;
+        border: 2px solid #e0e6ed;
+        transition: border-color 0.3s ease;
+    }
+    .stTextArea textarea:focus {
+        border-color: #4a90e2;
+    }
+    .stExpander {
+        background-color: #f8fafc;
+        border-radius: 12px;
+        border: 1px solid #e0e6ed;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        padding: 15px;
+    }
+    .stDataFrame {
+        background-color: #ffffff;
+        border-radius: 12px;
+        padding: 15px;
+        border: 1px solid #e0e6ed;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+    }
+    .card {
+        background-color: #ffffff;
+        border-radius: 12px;
+        padding: 20px;
+        margin-bottom: 20px;
+        border: 1px solid #e0e6ed;
+        transition: all 0.3s ease;
+    }
+    .card:hover {
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        transform: translateY(-3px);
+    }
+    .header-section {
+        text-align: center;
+        margin-bottom: 2em;
+    }
+    .subheader {
+        color: #7f8c8d;
+        font-size: 1.2em;
+        line-height: 1.6;
+    }
+    .highlight {
+        background-color: #e8f0fe;
+        padding: 10px;
+        border-radius: 8px;
+        margin: 10px 0;
+    }
+    </style>
+""", unsafe_allow_html=True)
 
-# Function to load Lottie animations
-def load_lottie_url(url: str):
-    r = requests.get(url)
-    if r.status_code != 200:
-        return None
-    return r.json()
-
-welcome_animation = load_lottie_url("https://lottie.host/0bd09814-d2ae-4f38-a301-4b1c01d1d778/OWezBSJvFE.json")
-congratulations_animation = load_lottie_url("https://lottie.host/768b23c5-2167-45ed-afb0-42f3fc4d7c0c/F40M6pnGsn.json")
-
-def extract_and_convert_list(text):
-    list_match = re.search(r'\[.*?\]', text, re.DOTALL)
-    if list_match:
-        list_string = list_match.group()
-        try:
-            python_list = ast.literal_eval(list_string)
-            if isinstance(python_list, list):
-                return [str(item) for item in python_list]  # Ensure all items are strings
-            else:
-                return None
-        except (SyntaxError, ValueError):
-            return None
-    else:
-        return None
-
+# Utility functions (unchanged)
 def extract_and_parse_json(text):
-    start_index = text.find('{')
-    end_index = text.rfind('}')
-    if start_index == -1 or end_index == -1 or end_index < start_index:
-        return None, False
-    json_str = text[start_index:end_index + 1]
     try:
-        parsed_json = json.loads(json_str)
-        return parsed_json, True
+        json_match = re.search(r'\{.*\}', text, re.DOTALL)
+        if not json_match:
+            return None, False
+        return json.loads(json_match.group()), True
     except json.JSONDecodeError:
         return None, False
 
-def validate_and_convert_salary_json(json_input):
-    def is_valid_salary_comparison(data):
-        return (
-            "salary_comparison" in data and
-            "philippines" in data["salary_comparison"] and
-            "united_states" in data["salary_comparison"]
-        )
-    if isinstance(json_input, dict):
-        valid = is_valid_salary_comparison(json_input)
-        return json_input, valid
+def validate_salary_json(json_data):
+    if not isinstance(json_data, dict) or "salary_comparison" not in json_data:
+        return None, False
+    salaries = json_data["salary_comparison"]
+    if not all(key in salaries for key in ["philippines", "united_states"]):
+        return None, False
     try:
-        data = json.loads(json_input)
-        valid = is_valid_salary_comparison(data)
-        valid = data["salary_comparison"]["philippines"] < 10000 and data["salary_comparison"]["united_states"] < 10000
-        return data, valid
-    except (json.JSONDecodeError, TypeError):
+        ph_salary = float(salaries["philippines"])
+        us_salary = float(salaries["united_states"])
+        if not (0 < ph_salary < 10000 and 0 < us_salary < 10000 and ph_salary < us_salary):
+            return None, False
+        return json_data, True
+    except (ValueError, TypeError):
         return None, False
 
-def check_input_specificity(input_text):
-    generic_phrases = ["general","n/a", "not sure", "don't know", "do you", "are you", "you", "Are there"]
-    if any(phrase.lower() in input_text.lower() for phrase in generic_phrases):
+def validate_input(text):
+    if not text or len(text.strip()) < 10:
         return False
-    return True
-
-def simulate_job_relevance_classification(job_list, company_needs_description):
-    if not job_list:
-        return [], []
-    
-    relevant_roles = [role for role in job_list if role['role'].lower() not in company_needs_description.lower()]
-    irrelevant_roles = [role for role in job_list if role['role'].lower() in company_needs_description.lower()]
-
-    return relevant_roles, irrelevant_roles
-
-def input_is_out_of_context(input_text):
+    generic_phrases = ["general", "n/a", "not sure", "don't know"]
     irrelevant_keywords = ["unrelated", "out of context", "irrelevant"]
-    for phrase in irrelevant_keywords:
-        if phrase.lower() in input_text.lower():
-            return True
-    return False
-
-def is_relevant_to_jobs_and_business(input_text):
-    relevant_keywords = ["job", "hire", "business", "project", "team", "staff", "company", "role", "position", "expertise"]
-    for keyword in relevant_keywords:
-        if keyword.lower() in input_text.lower():
-            return True
-    return False
+    relevant_keywords = ["job", "hire", "business", "project", "team", "company", "role", "position", "expertise"]
+    text_lower = text.lower()
+    if any(phrase in text_lower for phrase in generic_phrases + irrelevant_keywords):
+        return False
+    return any(keyword in text_lower for keyword in relevant_keywords)
 
 def analyze_url_content(url):
     try:
-        response = requests.get(url)
-        if response.status_code == 200:
-            text = response.text
-            about_us_start = text.lower().find('about us')
-            if about_us_start == -1:
-                about_us_start = text.lower().find('our company')
-            if about_us_start != -1:
-                about_us_end = text.lower().find('</div>', about_us_start)
-                about_us_content = text[about_us_start:about_us_end]
-                return about_us_content
-        else:
+        response = requests.get(url, timeout=5)
+        if response.status_code != 200:
             return None
-    except Exception as e:
+        text = response.text
+        about_us_start = text.lower().find('about us') or text.lower().find('our company')
+        if about_us_start != -1:
+            about_us_end = text.lower().find('</div>', about_us_start)
+            return text[about_us_start:about_us_end] if about_us_end != -1 else text[about_us_start:about_us_start+500]
+        return text[:500]
+    except:
         return None
 
-def generate_key_job_roles_and_explanations(description):
-    prompt = f"""
-    Analyze the job role needs of a company based on the description/queries provided. Return a list of relevant job roles along with a brief explanation for each role.
-    Description: {description}
-    """
-    response = model.generate_content(prompt)
-    response_text = response.text
-    return response_text
-
-def cache_result(key, func, *args):
-    if key not in st.session_state:
+def cache_result(key, func, *args, timeout=3600):
+    if key not in st.session_state or (st.session_state.get(f"{key}_time", 0) + timeout) < time.time():
         st.session_state[key] = func(*args)
+        st.session_state[f"{key}_time"] = time.time()
     return st.session_state[key]
 
-# Function to download and save logo
-def ensure_logo_exists():
-    logo_path = "team_builder_logo.png"
-    if not os.path.exists(logo_path):
-        logo_url = "https://img.freepik.com/free-vector/business-team-putting-together-jigsaw-puzzle-isolated-flat-vector-illustration-cartoon-partners-working-connection-teamwork-partnership-cooperation-concept_74855-9814.jpg"
-        try:
-            response = requests.get(logo_url)
-            if response.status_code == 200:
-                with open(logo_path, 'wb') as f:
-                    f.write(response.content)
-        except Exception as e:
-            st.error(f"Failed to download logo: {str(e)}")
-            return False
-    return True
+# Main app logic
+def main():
+    with st.container():
+        st.markdown("""
+            <div class='header-section'>
+                <h1>Team Builder</h1>
+                <p class='subheader'>Craft your ideal team with personalized job role recommendations and salary insights.</p>
+            </div>
+        """, unsafe_allow_html=True)
 
-# Header and introduction
-col1, col2, col3 = st.columns([2,5.5,2])
-with col1:
-    st.write(' ')
-with col2:
-    if ensure_logo_exists():
-        st.image("team_builder_logo.png", width=400)
-    else:
-        st.write("# Team Builder")
-with col3:
-    st.write(' ')
-    
-st_lottie(welcome_animation, height=200, key="welcome_animation")
+        st.markdown("<h2>Describe Your Company's Needs</h2>", unsafe_allow_html=True)
+        st.markdown("""
+            <div class='highlight'>
+                <p style='color: #34495e;'>Share your challenges, goals, or expertise needs. Examples include:</p>
+                <ul style='color: #34495e;'>
+                    <li>Project bottlenecks requiring specific skills</li>
+                    <li>New initiatives needing specialized talent</li>
+                    <li>Roles to strengthen your team</li>
+                </ul>
+            </div>
+        """, unsafe_allow_html=True)
+        company_needs_description = st.text_area("Enter Description or Paste Company URL/About Us Page:", height=150, placeholder="E.g., 'We need a team to develop a new mobile app and improve our cloud infrastructure.'")
 
-st.write("""
-<div style="text-align: center;">
-    <h1>Smart Team Builder</h1>
-    <p>
-    Welcome to Smart Team Builder, your intelligent assistant for building high-performing teams. 
-    This tool helps you identify the right roles and expertise needed for your projects and business goals.
-    We analyze your needs and provide recommendations for team composition while comparing costs across different regions.
-    Our goal is to help you build the most effective team while optimizing your resources.
-    </p>
-</div>
-""", unsafe_allow_html=True)
+    # Session state initialization
+    for key in ['main_response', 'job_list', 'relevant_job_list', 'irrelevant_job_list', 'job_list_salary', 'additional_info', 'show_job_list']:
+        if key not in st.session_state:
+            st.session_state[key] = [] if 'list' in key else "" if key != 'show_job_list' else False
 
-st.markdown("""
-<div style="text-align: center;">
-    <h3>Help Us Build Your Perfect Team</h3>
-    <p>Please describe the challenges, needs, or goals your company is currently facing. For example:</p>
-    <ul style="text-align: left; display: inline-block;">
-        <li>Are there any specific project bottlenecks?</li>
-        <li>What new initiatives are you planning that require additional expertise?</li>
-        <li>Do you need recommendations for specific job roles to enhance your team's capabilities?</li>
-    </ul>
-    <p>Provide as much detail as possible to help us suggest the most suitable job roles and expertise needed for your company. You may also input the job roles you need directly.</p>
-</div>
-""", unsafe_allow_html=True)
-
-company_needs_description = st.text_area("Enter Description or Paste the Company's URL/About us page to generate job roles:", height=150)
-
-if 'main_response' not in st.session_state:
-    st.session_state.main_response = ""
-
-if "job_list" not in st.session_state:
-    st.session_state.job_list = []
-
-if "relevant_job_list" not in st.session_state:
-    st.session_state.relevant_job_list = []
-
-if "irrelevant_job_list" not in st.session_state:
-    st.session_state.irrelevant_job_list = []
-
-if "job_list_salary" not in st.session_state:
-    st.session_state.job_list_salary = []
-
-if 'additional_info' not in st.session_state:
-    st.session_state.additional_info = ""
-
-if 'show_job_list' not in st.session_state:
-    st.session_state.show_job_list = False
-
-if st.button("Analyze"):
-    is_url_provided = company_needs_description.startswith("http")
-    if is_url_provided:
-        about_us_content = analyze_url_content(company_needs_description)
-        if about_us_content:
-            company_needs_description = about_us_content
-        else:
-            st.session_state['job_list'] = []
-            st.session_state.show_job_list = False
-    
-    if not is_url_provided and (not check_input_specificity(company_needs_description) or input_is_out_of_context(company_needs_description) or not is_relevant_to_jobs_and_business(company_needs_description)):
-        st.warning("Your input is not applicable. Please provide more specific details.")
-        st.session_state['job_list'] = []
-        st.session_state.show_job_list = False
-    else:
-        with st.spinner("Analyzing your needs..."):
-            cache_key = hashlib.md5(company_needs_description.encode()).hexdigest()
-            response_text = cache_result(cache_key, generate_key_job_roles_and_explanations, company_needs_description)
-            
-            st.session_state.main_response = response_text
-
-            try:
-                response_data = json.loads(response_text)
-                if isinstance(response_data, list):
-                    response_data = response_data[0]
-            except json.JSONDecodeError:
-                response_data = {}
-
-            job_list_response = response_data.get('job_roles', [])
-            if job_list_response:
-                st.session_state['job_list'] = job_list_response
-                st.session_state.relevant_job_list, st.session_state.irrelevant_job_list = simulate_job_relevance_classification(job_list_response, company_needs_description)
-                st.session_state.show_job_list = True
+    if st.button("Analyze Needs", key="analyze_button"):
+        is_url_provided = company_needs_description.startswith("http")
+        if is_url_provided:
+            about_us_content = analyze_url_content(company_needs_description)
+            if about_us_content:
+                company_needs_description = about_us_content
             else:
-                st.warning("Failed to generate job roles. Please provide more specific details.")
+                st.session_state['job_list'] = []
                 st.session_state.show_job_list = False
 
-
-
-if st.session_state.main_response:
-    with st.expander("View Response"):
-        response_data = st.session_state.main_response
-        try:
-            response_data = json.loads(response_data)
-            if isinstance(response_data, list):
-                response_data = response_data[0]
-        except json.JSONDecodeError:
-            response_data = {}
-        if 'job_roles' in response_data:
-            for job in response_data['job_roles']:
-                st.write(f"**{job['role']}**")
-                st.write(f"{job['description']}")
-                st.write(' ')
-
-    additional_info = st.text_area("Please add in anything more you like, otherwise just leave it blank:", height=100)
-    st.session_state.additional_info = additional_info
-
-    if st.button("Submit Additional Info"):
-        if additional_info.lower() in ["n/a", "not sure", "don't know", "general"] or not is_relevant_to_jobs_and_business(additional_info):
-            st.warning("Your additional info is not applicable. Please provide more specific details.")
+        if not validate_input(company_needs_description):
+            st.error("Please provide specific details related to jobs or business needs.", icon="🚫")
             st.session_state['job_list'] = []
             st.session_state.show_job_list = False
         else:
-            with st.spinner("Processing additional info..."):
-                full_description = f"{company_needs_description}\n\nAdditional Info: {additional_info}"
-                cache_key = hashlib.md5(full_description.encode()).hexdigest()
-                response_text = cache_result(cache_key, generate_key_job_roles_and_explanations, full_description)
-                
+            with st.spinner("Analyzing your needs..."):
+                prompt = f"""
+                Analyze the company needs description and return a JSON object with relevant job roles and brief explanations.
+                Description: {company_needs_description}
+                Format:
+                {{
+                    "job_roles": [
+                        {{"role": "title", "description": "20-40 word explanation"}},
+                        ...
+                    ]
+                }}
+                Guidelines:
+                - Return only JSON
+                - Ensure roles are specific and relevant
+                - Descriptions must be concise
+                """
+                cache_key = hashlib.md5(prompt.encode()).hexdigest()
+                response_text = cache_result(cache_key, lambda p: model.generate_content(p).text, prompt)
                 st.session_state.main_response = response_text
 
-                try:
-                    response_data = json.loads(response_text)
-                    if isinstance(response_data, list):
-                        response_data = response_data[0]
-                except json.JSONDecodeError:
-                    response_data = {}
-
-                job_list_response = response_data.get('job_roles', [])
-                if job_list_response:
-                    st.session_state['job_list'] = job_list_response
-                    st.session_state.relevant_job_list, st.session_state.irrelevant_job_list = simulate_job_relevance_classification(job_list_response, full_description)
+                parsed_json, success = extract_and_parse_json(response_text)
+                if success and "job_roles" in parsed_json:
+                    job_list = parsed_json["job_roles"]
+                    st.session_state['job_list'] = [j["role"] for j in job_list]
+                    st.session_state.relevant_job_list = [j["role"] for j in job_list if j["role"].lower() not in company_needs_description.lower()]
+                    st.session_state.irrelevant_job_list = [j["role"] for j in job_list if j["role"].lower() in company_needs_description.lower()]
                     st.session_state.show_job_list = True
                 else:
-                    st.warning("Failed to generate job roles. Please provide more specific details.")
+                    st.error("Could not identify job roles. Please refine your description.", icon="⚠️")
+                    st.session_state['job_list'] = []
                     st.session_state.show_job_list = False
 
-if st.session_state.show_job_list and st.session_state['job_list']:
-    st.markdown("### Job Roles You May Need")
-    
-    st.markdown("#### Relevant Job Roles")
-    relevant_roles_str = '\n'.join([role['role'] for role in st.session_state.relevant_job_list])
-    relevant_roles_input = st.text_area("Add or edit relevant job roles (one per line):", value=relevant_roles_str, height=100)
-    st.session_state.relevant_job_list = [{'role': role.strip()} for role in relevant_roles_input.split('\n') if role.strip()]
+    if st.session_state.main_response:
+        with st.expander("View Detailed Analysis", expanded=False):
+            parsed_json, _ = extract_and_parse_json(st.session_state.main_response)
+            if parsed_json and "job_roles" in parsed_json:
+                for job in parsed_json["job_roles"]:
+                    st.markdown(f"<div class='card'><strong>{job['role']}</strong><p>{job['description']}</p></div>", unsafe_allow_html=True)
+            else:
+                st.write(st.session_state.main_response)
 
-    st.markdown("#### Irrelevant Job Roles")
-    irrelevant_roles_str = '\n'.join([role['role'] for role in st.session_state.irrelevant_job_list])
-    irrelevant_roles_input = st.text_area("Add or edit irrelevant job roles (one per line):", value=irrelevant_roles_str, height=100)
-    st.session_state.irrelevant_job_list = [{'role': role.strip()} for role in irrelevant_roles_input.split('\n') if role.strip()]
+        st.markdown("<h3>Add More Details</h3>", unsafe_allow_html=True)
+        additional_info = st.text_area("Provide Additional Context (Optional):", height=100, placeholder="E.g., 'We need expertise in AI-driven analytics.'")
+        st.session_state.additional_info = additional_info
 
-    if st.button("Proceed"):
-        st.session_state.show_job_list = False
+        if st.button("Submit Additional Info", key="submit_additional"):
+            if not validate_input(additional_info):
+                st.error("Please provide specific, relevant additional details.", icon="🚫")
+            else:
+                with st.spinner("Processing additional info..."):
+                    full_description = f"{company_needs_description}\n\nAdditional Info: {additional_info}"
+                    prompt = f"""
+                    Analyze the company needs description and return a JSON object with 3-5 relevant job roles and brief explanations.
+                    Description: {full_description}
+                    Format:
+                    {{
+                        "job_roles": [
+                            {{"role": "title", "description": "20-40 word explanation"}},
+                            ...
+                        ]
+                    }}
+                    Guidelines:
+                    - Return only JSON
+                    - Ensure roles are specific and relevant
+                    - Descriptions must be concise
+                    """
+                    cache_key = hashlib.md5(prompt.encode()).hexdigest()
+                    response_text = cache_result(cache_key, lambda p: model.generate_content(p).text, prompt)
+                    st.session_state.main_response = response_text
 
-if st.session_state.relevant_job_list:
-    job_list_salary = []
+                    parsed_json, success = extract_and_parse_json(response_text)
+                    if success and "job_roles" in parsed_json:
+                        job_list = parsed_json["job_roles"]
+                        st.session_state['job_list'] = [j["role"] for j in job_list]
+                        st.session_state.relevant_job_list = [j["role"] for j in job_list if j["role"].lower() in full_description.lower()]
+                        st.session_state.irrelevant_job_list = [j["role"] for j in job_list if j["role"].lower() not in full_description.lower()]
+                        st.session_state.show_job_list = True
+                    else:
+                        st.error("Could not identify job roles. Please refine your description.", icon="⚠️")
+                        st.session_state['job_list'] = []
+                        st.session_state.show_job_list = False
 
-    for job in st.session_state["relevant_job_list"]:
-        job_not_parsed_successfully = True
+    if st.session_state.show_job_list and st.session_state['job_list']:
+        st.markdown("<h2>Suggested Job Roles</h2>", unsafe_allow_html=True)
+        col1, col2 = st.columns(2, gap="medium")
+        with col1:
+            st.markdown("<h3>Relevant Roles</h3>", unsafe_allow_html=True)
+            relevant_roles_str = ', '.join(st.session_state.relevant_job_list)
+            relevant_roles_input = st.text_area("Edit Relevant Roles (comma-separated):", value=relevant_roles_str, height=100, placeholder="E.g., Software Engineer, Data Analyst")
+            st.session_state.relevant_job_list = [role.strip() for role in relevant_roles_input.split(',') if role.strip()]
+        with col2:
+            st.markdown("<h3>Irrelevant Roles</h3>", unsafe_allow_html=True)
+            irrelevant_roles_str = ', '.join(st.session_state.irrelevant_job_list)
+            irrelevant_roles_input = st.text_area("Edit Irrelevant Roles (comma-separated):", value=irrelevant_roles_str, height=100, placeholder="E.g., Graphic Designer, HR Manager")
+            st.session_state.irrelevant_job_list = [role.strip() for role in irrelevant_roles_input.split(',') if role.strip()]
 
-        while job_not_parsed_successfully:
-            cache_key = hashlib.md5(job['role'].encode()).hexdigest()
+        if st.button("Proceed with Roles", key="proceed_button"):
+            st.session_state.show_job_list = False
+
+    if st.session_state.relevant_job_list:
+        job_list_salary = []
+        for job in st.session_state["relevant_job_list"]:
             prompt = f"""
-            Generate a JSON object that represents the monthly median salary in US Dollars for a specific job role, with comparisons between the Philippines and the United States. Please adhere to the following guidelines:
-            - The output must be a JSON object without any comments.
-            - All monetary values must be in USD.
-            - Salaries should be expressed as whole numbers without commas; ensure they are realistic and below 10000.
-            - Typically, salaries in the United States are significantly higher than in the Philippines; please consider this when providing figures.
-            - The format of the JSON should strictly follow the structure below:
-
-            Here's the job: {job['role']}
-
-            Required JSON format:
+            Provide a JSON object with realistic monthly median salaries in USD for the job role '{job}' in the Philippines and the United States as of April 2025. Ensure salaries are whole numbers below 10,000 USD, with US salaries higher than Philippines. Format:
             {{
                 "salary_comparison": {{
                     "philippines": <number>,
@@ -345,117 +342,88 @@ if st.session_state.relevant_job_list:
                 }}
             }}
             """
+            cache_key = hashlib.md5(prompt.encode()).hexdigest()
+            response_text = cache_result(cache_key, lambda p: model.generate_content(p).text, prompt)
+            salary_json, valid = validate_salary_json(extract_and_parse_json(response_text)[0] or {})
+            if valid:
+                job_salary = {
+                    "job_role": job,
+                    "currency": "USD",
+                    "salary_comparison": salary_json["salary_comparison"]
+                }
+                job_list_salary.append(job_salary)
+            else:
+                st.warning(f"Could not fetch valid salary data for {job}. Skipping.", icon="⚠️")
 
-            response_text = cache_result(cache_key, model.generate_content, prompt)
-            job_salary_comparison = response_text.text
-
-            salary_comparison_json, salary_comparison_parsed_successfully = extract_and_parse_json(job_salary_comparison)
-            
-            if salary_comparison_parsed_successfully == False:
-                continue
-
-            salary_comparison_json_cleaned, salary_comparison_valid_json = validate_and_convert_salary_json(salary_comparison_json)
-
-            if salary_comparison_valid_json == False:
-                continue
-
-            job_not_parsed_successfully = False
-    
-        job_salary = {
-            "job_role": job['role'],
-            "currency": "USD",
-            "salary_comparison": salary_comparison_json_cleaned['salary_comparison']
-        }
-        job_list_salary.append(job_salary)
         st.session_state["job_list_salary"] = job_list_salary
+        if job_list_salary:
+            df = pd.DataFrame(job_list_salary)
+            df = pd.concat([df.drop(['salary_comparison'], axis=1), pd.json_normalize(df['salary_comparison'])], axis=1)
+            st.markdown("<h2>Salary Comparison</h2>", unsafe_allow_html=True)
+            st.dataframe(df.style.format({"philippines": "${:,.0f}", "united_states": "${:,.0f}"}), use_container_width=True)
 
-    df = pd.DataFrame(job_list_salary)
-    df = pd.concat([df.drop(['salary_comparison'], axis=1), df['salary_comparison'].apply(pd.Series)], axis=1)
+    if st.session_state['job_list_salary']:
+        st.markdown("<h2>Team Size Configuration</h2>", unsafe_allow_html=True)
+        cols = st.columns(2, gap="medium")
+        for i, job in enumerate(st.session_state['job_list_salary']):
+            with cols[i % 2]:
+                st.markdown(f"<div class='card'><strong>{job['job_role']}</strong></div>", unsafe_allow_html=True)
+                job["no_employees"] = st.number_input(f"Number of {job['job_role']}s:", min_value=0, key=f"num_{job['job_role']}", format="%d")
 
-    col1, col2, col3 = st.columns([1,8,1])
-    with col2:
-        st.dataframe(df)
+        if st.button("Calculate Total Cost", key="calculate_cost"):
+            st.markdown("<h2>Cost Breakdown</h2>", unsafe_allow_html=True)
+            for job in st.session_state['job_list_salary']:
+                job["ph_cost"] = job["no_employees"] * job["salary_comparison"]["philippines"]
+                job["us_cost"] = job["no_employees"] * job["salary_comparison"]["united_states"]
+                job["savings"] = job["us_cost"] - job["ph_cost"]
+                job["currency_symbol"] = "$"
 
-if st.session_state['job_list_salary']:
-    total_jobs = len(st.session_state['job_list_salary'])
+            df = pd.DataFrame(st.session_state['job_list_salary'])
+            df = pd.concat([df.drop(['salary_comparison'], axis=1), pd.json_normalize(df['salary_comparison'])], axis=1)
+            st.dataframe(df.style.format({
+                "philippines": "${:,.0f}",
+                "united_states": "${:,.0f}",
+                "ph_cost": "${:,.0f}",
+                "us_cost": "${:,.0f}",
+                "savings": "${:,.0f}"
+            }), use_container_width=True)
 
-    st.markdown("##### Select the number of employees you plan to hire")
+            buffer = io.BytesIO()
+            df.to_csv(buffer, index=False)
+            st.download_button(
+                label="Download Full Report",
+                data=buffer,
+                file_name='team_builder_report.csv',
+                mime='text/csv',
+                key="download_full"
+            )
 
-    columns_per_row = 2
-    num_rows = (total_jobs + columns_per_row - 1) // columns_per_row
+            philippines_total = df["ph_cost"].sum()
+            us_total = df["us_cost"].sum()
+            savings = df["savings"].sum()
 
-    for i in range(num_rows):
-        cols = st.columns(columns_per_row)
-        for j in range(columns_per_row):
-            job_index = i * columns_per_row + j
-            if job_index < total_jobs:
-                job = st.session_state['job_list_salary'][job_index]
-                with cols[j]:
-                    st.session_state['job_list_salary'][job_index]["no of employees"] = st.number_input(f"{job['job_role']}:", min_value=0, key=f"num_{job['job_role']}")
+            st.markdown(f"<div class='card'><strong>Philippines Total Cost:</strong> ${philippines_total:,.2f}</div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='card'><strong>United States Total Cost:</strong> ${us_total:,.2f}</div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='card'><strong>Total Savings:</strong> ${savings:,.2f}</div>", unsafe_allow_html=True)
 
-if st.session_state["job_list_salary"]:
-    if st.button("Calculate Cost"):
-        total_jobs = len(st.session_state['job_list_salary'])
+            st.markdown("<h2>Refined Job Role Insights</h2>", unsafe_allow_html=True)
+            refined_df = df[["job_role", "ph_cost", "us_cost", "savings"]]
+            st.dataframe(refined_df.style.format({
+                "ph_cost": "${:,.0f}",
+                "us_cost": "${:,.0f}",
+                "savings": "${:,.0f}"
+            }), use_container_width=True)
 
-        st.markdown("##### Cost Calculation")
+            buffer = io.BytesIO()
+            refined_df.to_csv(buffer, index=False)
+            st.download_button(
+                label="Download Refined Report",
+                data=buffer,
+                file_name='refined_team_builder_report.csv',
+                mime='text/csv',
+                key="download_refined"
+            )
+            st.success("By hiring in the Philippines, you can save significantly on labor costs while maintaining high-quality talent.", icon="✅")
 
-        for i in range(total_jobs):
-            st.session_state['job_list_salary'][i]["philippines_total_cost"] = st.session_state['job_list_salary'][i]["no of employees"] * st.session_state['job_list_salary'][i]["salary_comparison"]["philippines"]
-            st.session_state['job_list_salary'][i]["united_states_total_cost"] = st.session_state['job_list_salary'][i]["no of employees"] * st.session_state['job_list_salary'][i]["salary_comparison"]["united_states"]
-            st.session_state['job_list_salary'][i]["total_savings"] = st.session_state['job_list_salary'][i]["united_states_total_cost"] - st.session_state['job_list_salary'][i]["philippines_total_cost"]
-            st.session_state['job_list_salary'][i]["connext_total_cost"] = st.session_state['job_list_salary'][i]["philippines_total_cost"]
-    
-        df = pd.DataFrame(st.session_state['job_list_salary'])
-        df = pd.concat([df.drop(['salary_comparison'], axis=1), df['salary_comparison'].apply(pd.Series)], axis=1)
-        st.dataframe(df)
-
-        buffer = io.BytesIO()
-        df.to_csv(buffer, index=False)
-        st.download_button(
-            label="Download data as CSV",
-            data=buffer,
-            file_name='team_builder_report.csv',
-            mime='text/csv',
-        )
-
-        philippines_overall_cost = df["philippines_total_cost"].sum()
-        united_states_overall_cost = df["united_states_total_cost"].sum()
-        expected_savings = df["total_savings"].sum()
-        connext_total_cost = df["philippines_total_cost"].sum()  # Calculate the total cost when hiring through Connext Global Solutions
-
-        st.write(f"Philippines Overall Cost: {philippines_overall_cost} USD")
-        st.write(f"United States Overall Cost: {united_states_overall_cost} USD")
-        st.divider()
-        st.write(f"* If you hire all of your employees in the Philippines, the following is your expected savings.")
-        st.write(f"Overall Savings: {expected_savings} USD")
-        
-        st.divider()
-
-        # Refined job role list with cost difference and savings information
-        st.markdown("### Job Role List with Cost Difference and Savings Information")
-
-        refined_df = df[["job_role", "philippines_total_cost", "united_states_total_cost", "total_savings"]]
-        st.write(refined_df)
-
-        buffer = io.BytesIO()
-        refined_df.to_csv(buffer, index=False)
-        st.download_button(
-            label="Download refined data as CSV",
-            data=buffer,
-            file_name='team_builder_report.csv',
-            mime='text/csv',
-        )
-
-        # Add a summary of savings information
-        total_philippines_cost = refined_df["philippines_total_cost"].sum()
-        total_united_states_cost = refined_df["united_states_total_cost"].sum()
-        total_savings = refined_df["total_savings"].sum()
-
-        st.write(f"**Total Cost if Hiring in the Philippines:** ${total_philippines_cost:,.2f}")
-        st.write(f"**Total Cost if Hiring in the United States:** ${total_united_states_cost:,.2f}")
-        st.write(f"**Potential Total Savings:** ${total_savings:,.2f}")
-
-        st.markdown("""
-        *By strategically building your team across different regions, you can achieve significant cost savings while maintaining high-quality talent and operational control.*
-        """)
-        st_lottie(congratulations_animation, height=200, key="congratulations_animation")
+if __name__ == "__main__":
+    main()
