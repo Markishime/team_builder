@@ -3,6 +3,6 @@ pandas
 requests
 streamlit-lottie
 python-dotenv
-google-generativeai
+google-genai
 
 protobuf>=6.33.5 # not directly required, pinned by Snyk to avoid a vulnerability

@@ -1,6 +1,8 @@
 import streamlit as st
 import pandas as pd
-import google.generativeai as genai
+from google import genai
+from google.genai import types
+from google.genai import errors as genai_errors
 import json
 import re
 import io
@@ -9,126 +11,138 @@ import hashlib
 import time
 
 # Configure Gemini API
-genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
-generation_config = {
-    "temperature": 0.7,
-    "top_p": 0.9,
-    "top_k": 40,
-    "max_output_tokens": 2048
-}
-model = genai.GenerativeModel('gemini-1.5-flash', generation_config=generation_config)
+client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
+GEMINI_MODEL = "gemini-2.5-flash"
+generation_config = types.GenerateContentConfig(
+    temperature=0.7,
+    top_p=0.9,
+    top_k=40,
+    max_output_tokens=2048
+)
 
 # Custom CSS for enhanced UI with fixed scrollbar
 st.markdown("""
     <style>
+    /* ── Scrollbar ── */
     body {
         overflow-y: auto;
         scrollbar-width: thin;
         scrollbar-color: #4a90e2 #e0e6ed;
     }
-    body::-webkit-scrollbar {
-        width: 12px;
-    }
-    body::-webkit-scrollbar-track {
-        background: #e0e6ed;
-        border-radius: 10px;
-    }
+    body::-webkit-scrollbar { width: 12px; }
+    body::-webkit-scrollbar-track { background: #e0e6ed; border-radius: 10px; }
     body::-webkit-scrollbar-thumb {
         background: #4a90e2;
         border-radius: 10px;
         border: 3px solid #e0e6ed;
     }
-    body::-webkit-scrollbar-thumb:hover {
-        background: #357abd;
-    }
-    .main {
-        background-color: #ffffff;
-        padding: 30px;
-        border-radius: 15px;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.1);
-        max-width: 1200px;
-        margin: 20px auto;
-    }
+    body::-webkit-scrollbar-thumb:hover { background: #357abd; }
+
+    /* ── Button ── */
     .stButton>button {
-        background: linear-gradient(90deg, #4a90e2, #357abd);
-        color: white;
-        border-radius: 12px;
-        padding: 12px 24px;
-        font-weight: 600;
-        transition: all 0.3s ease;
-        border: none;
+        background: linear-gradient(90deg, #4a90e2, #357abd) !important;
+        color: white !important;
+        border-radius: 12px !important;
+        padding: 12px 24px !important;
+        font-weight: 600 !important;
+        transition: all 0.3s ease !important;
+        border: none !important;
     }
     .stButton>button:hover {
-        background: linear-gradient(90deg, #357abd, #4a90e2);
-        transform: translateY(-2px);
-        box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        background: linear-gradient(90deg, #357abd, #4a90e2) !important;
+        transform: translateY(-2px) !important;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.2) !important;
     }
-    h1 {
-        color: #2c3e50;
-        font-family: 'Helvetica Neue', sans-serif;
-        font-size: 2.8em;
-        text-align: center;
-        margin-bottom: 0.5em;
+
+    /* ── Headings – target Streamlit's markdown containers directly ── */
+    [data-testid="stMarkdownContainer"] h1,
+    [data-testid="stMarkdownContainer"] h2,
+    [data-testid="stMarkdownContainer"] h3,
+    .stMarkdown h1, .stMarkdown h2, .stMarkdown h3,
+    h1, h2, h3 {
+        color: #1a2535 !important;
+        font-family: 'Helvetica Neue', sans-serif !important;
     }
-    h2, h3 {
-        color: #34495e;
-        font-family: 'Helvetica Neue', sans-serif;
-        margin-top: 1.5em;
+    [data-testid="stMarkdownContainer"] h1,
+    .stMarkdown h1, h1 {
+        font-size: 2.8em !important;
+        text-align: center !important;
+        margin-bottom: 0.5em !important;
     }
-    .stTextArea>label, .stNumberInput>label {
-        font-weight: 600;
-        color: #34495e;
-        font-size: 1.1em;
+
+    /* ── Labels ── */
+    label, .stTextArea label, .stNumberInput label,
+    [data-testid="stWidgetLabel"] {
+        font-weight: 600 !important;
+        color: #2c3e50 !important;
+        font-size: 1.05em !important;
     }
     .stTextArea textarea {
-        border-radius: 10px;
-        border: 2px solid #e0e6ed;
-        transition: border-color 0.3s ease;
+        border-radius: 10px !important;
+        border: 2px solid #c8d6e5 !important;
+        transition: border-color 0.3s ease !important;
     }
-    .stTextArea textarea:focus {
-        border-color: #4a90e2;
-    }
-    .stExpander {
-        background-color: #f8fafc;
-        border-radius: 12px;
-        border: 1px solid #e0e6ed;
-        box-shadow: 0 2px 10px rgba(0,0,0,0.05);
-        padding: 15px;
-    }
-    .stDataFrame {
-        background-color: #ffffff;
-        border-radius: 12px;
-        padding: 15px;
-        border: 1px solid #e0e6ed;
-        box-shadow: 0 2px 10px rgba(0,0,0,0.05);
-    }
+    .stTextArea textarea:focus { border-color: #4a90e2 !important; }
+
+    /* ── Card ── */
     .card {
-        background-color: #ffffff;
-        border-radius: 12px;
-        padding: 20px;
-        margin-bottom: 20px;
-        border: 1px solid #e0e6ed;
-        transition: all 0.3s ease;
+        background-color: #ffffff !important;
+        color: #2c3e50 !important;
+        border-radius: 12px !important;
+        padding: 20px !important;
+        margin-bottom: 20px !important;
+        border: 1px solid #c8d6e5 !important;
+        transition: all 0.3s ease !important;
     }
+    .card strong, .card p, .card * { color: #2c3e50 !important; }
     .card:hover {
-        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-        transform: translateY(-3px);
+        box-shadow: 0 4px 15px rgba(0,0,0,0.12) !important;
+        transform: translateY(-3px) !important;
     }
-    .header-section {
-        text-align: center;
-        margin-bottom: 2em;
-    }
+
+    /* ── Header / subheader ── */
+    .header-section { text-align: center !important; margin-bottom: 2em !important; }
     .subheader {
-        color: #7f8c8d;
-        font-size: 1.2em;
-        line-height: 1.6;
+        color: #3d5a78 !important;
+        font-size: 1.2em !important;
+        line-height: 1.6 !important;
     }
+
+    /* ── Highlight box – force light style, no OS dark mode bleed ── */
     .highlight {
-        background-color: #e8f0fe;
-        padding: 10px;
-        border-radius: 8px;
-        margin: 10px 0;
+        background-color: #deeafd !important;
+        color: #1a2535 !important;
+        padding: 12px 16px !important;
+        border-radius: 8px !important;
+        margin: 10px 0 !important;
+        border-left: 4px solid #4a90e2 !important;
     }
+    .highlight p, .highlight li, .highlight ul,
+    .highlight * { color: #1a2535 !important; }
+
+    /* ── Dark mode: ONLY via Streamlit's data-theme, NOT OS media query ── */
+    [data-theme="dark"] [data-testid="stMarkdownContainer"] h1,
+    [data-theme="dark"] [data-testid="stMarkdownContainer"] h2,
+    [data-theme="dark"] [data-testid="stMarkdownContainer"] h3,
+    [data-theme="dark"] h1, [data-theme="dark"] h2, [data-theme="dark"] h3 {
+        color: #e8eaf0 !important;
+    }
+    [data-theme="dark"] label,
+    [data-theme="dark"] [data-testid="stWidgetLabel"] { color: #a8bcd4 !important; }
+    [data-theme="dark"] .card {
+        background-color: #1e2d3d !important;
+        color: #e0e8f0 !important;
+        border-color: #3a5068 !important;
+    }
+    [data-theme="dark"] .card strong,
+    [data-theme="dark"] .card p,
+    [data-theme="dark"] .card * { color: #e0e8f0 !important; }
+    [data-theme="dark"] .highlight {
+        background-color: #1a2d4a !important;
+        color: #cfd8e8 !important;
+    }
+    [data-theme="dark"] .highlight * { color: #cfd8e8 !important; }
+    [data-theme="dark"] .subheader { color: #8aaac8 !important; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -188,6 +202,39 @@ def cache_result(key, func, *args, timeout=3600):
         st.session_state[f"{key}_time"] = time.time()
     return st.session_state[key]
 
+def generate_content(prompt):
+    max_retries = 5
+    delay = 5
+    for attempt in range(max_retries):
+        try:
+            return client.models.generate_content(
+                model=GEMINI_MODEL,
+                contents=prompt,
+                config=generation_config
+            ).text
+        except genai_errors.ClientError as e:
+            if e.status == "RESOURCE_EXHAUSTED" and attempt < max_retries - 1:
+                time.sleep(delay * (2 ** attempt))
+            else:
+                raise
+
+def render_html_table(df):
+    """Render a DataFrame as an HTML table without using pyarrow."""
+    headers = "".join(f"<th style='padding:8px 12px;text-align:left;border-bottom:2px solid #c8d6e5;'>{col}</th>" for col in df.columns)
+    rows = ""
+    for i, row in df.iterrows():
+        bg = "#f8fafc" if i % 2 == 0 else "#ffffff"
+        cells = "".join(f"<td style='padding:8px 12px;border-bottom:1px solid #e0e6ed;'>{val}</td>" for val in row)
+        rows += f"<tr style='background:{bg};'>{cells}</tr>"
+    html = f"""
+    <div style='overflow-x:auto;'>
+    <table style='width:100%;border-collapse:collapse;font-size:0.95em;'>
+        <thead><tr style='background:#4a90e2;color:white;'>{headers}</tr></thead>
+        <tbody>{rows}</tbody>
+    </table>
+    </div>"""
+    st.markdown(html, unsafe_allow_html=True)
+
 # Main app logic
 def main():
     with st.container():
@@ -201,8 +248,8 @@ def main():
         st.markdown("<h2>Describe Your Company's Needs</h2>", unsafe_allow_html=True)
         st.markdown("""
             <div class='highlight'>
-                <p style='color: #34495e;'>Share your challenges, goals, or expertise needs. Examples include:</p>
-                <ul style='color: #34495e;'>
+                <p>Share your challenges, goals, or expertise needs. Examples include:</p>
+                <ul>
                     <li>Project bottlenecks requiring specific skills</li>
                     <li>New initiatives needing specialized talent</li>
                     <li>Roles to strengthen your team</li>
@@ -233,30 +280,35 @@ def main():
         else:
             with st.spinner("Analyzing your needs..."):
                 prompt = f"""
-                Analyze the company needs description and return a JSON object with relevant job roles and brief explanations.
+                Analyze the company needs description and return a JSON object with job roles split into two categories.
                 Description: {company_needs_description}
                 Format:
                 {{
-                    "job_roles": [
-                        {{"role": "title", "description": "20-40 word explanation"}},
-                        ...
+                    "relevant_roles": [
+                        {{"role": "title", "description": "20-40 word explanation"}}
+                    ],
+                    "optional_roles": [
+                        {{"role": "title", "description": "20-40 word explanation"}}
                     ]
                 }}
                 Guidelines:
-                - Return only JSON
-                - Ensure roles are specific and relevant
-                - Descriptions must be concise
+                - Return only JSON, no markdown
+                - relevant_roles: roles directly needed based on the description
+                - optional_roles: roles that could help but are not explicitly required
+                - Descriptions must be concise (20-40 words)
                 """
                 cache_key = hashlib.md5(prompt.encode()).hexdigest()
-                response_text = cache_result(cache_key, lambda p: model.generate_content(p).text, prompt)
+                response_text = cache_result(cache_key, generate_content, prompt)
                 st.session_state.main_response = response_text
 
                 parsed_json, success = extract_and_parse_json(response_text)
-                if success and "job_roles" in parsed_json:
-                    job_list = parsed_json["job_roles"]
-                    st.session_state['job_list'] = [j["role"] for j in job_list]
-                    st.session_state.relevant_job_list = [j["role"] for j in job_list if j["role"].lower() not in company_needs_description.lower()]
-                    st.session_state.irrelevant_job_list = [j["role"] for j in job_list if j["role"].lower() in company_needs_description.lower()]
+                if success and ("relevant_roles" in parsed_json or "optional_roles" in parsed_json):
+                    relevant = parsed_json.get("relevant_roles", [])
+                    optional = parsed_json.get("optional_roles", [])
+                    all_roles = relevant + optional
+                    st.session_state['job_list'] = [j["role"] for j in all_roles]
+                    st.session_state.relevant_job_list = [j["role"] for j in relevant]
+                    st.session_state.irrelevant_job_list = [j["role"] for j in optional]
                     st.session_state.show_job_list = True
                 else:
                     st.error("Could not identify job roles. Please refine your description.", icon="⚠️")
@@ -266,9 +318,17 @@ def main():
     if st.session_state.main_response:
         with st.expander("View Detailed Analysis", expanded=False):
             parsed_json, _ = extract_and_parse_json(st.session_state.main_response)
-            if parsed_json and "job_roles" in parsed_json:
-                for job in parsed_json["job_roles"]:
-                    st.markdown(f"<div class='card'><strong>{job['role']}</strong><p>{job['description']}</p></div>", unsafe_allow_html=True)
+            if parsed_json and ("relevant_roles" in parsed_json or "optional_roles" in parsed_json):
+                relevant = parsed_json.get("relevant_roles", [])
+                optional = parsed_json.get("optional_roles", [])
+                if relevant:
+                    st.markdown("<h3>Relevant Roles</h3>", unsafe_allow_html=True)
+                    for job in relevant:
+                        st.markdown(f"<div class='card'><strong>{job['role']}</strong><p>{job['description']}</p></div>", unsafe_allow_html=True)
+                if optional:
+                    st.markdown("<h3>Optional Roles</h3>", unsafe_allow_html=True)
+                    for job in optional:
+                        st.markdown(f"<div class='card'><strong>{job['role']}</strong><p>{job['description']}</p></div>", unsafe_allow_html=True)
             else:
                 st.write(st.session_state.main_response)
 
@@ -283,30 +343,35 @@ def main():
                 with st.spinner("Processing additional info..."):
                     full_description = f"{company_needs_description}\n\nAdditional Info: {additional_info}"
                     prompt = f"""
-                    Analyze the company needs description and return a JSON object with 3-5 relevant job roles and brief explanations.
+                    Analyze the company needs description and return a JSON object with job roles split into two categories.
                     Description: {full_description}
                     Format:
                     {{
-                        "job_roles": [
-                            {{"role": "title", "description": "20-40 word explanation"}},
-                            ...
+                        "relevant_roles": [
+                            {{"role": "title", "description": "20-40 word explanation"}}
+                        ],
+                        "optional_roles": [
+                            {{"role": "title", "description": "20-40 word explanation"}}
                         ]
                     }}
                     Guidelines:
-                    - Return only JSON
-                    - Ensure roles are specific and relevant
-                    - Descriptions must be concise
+                    - Return only JSON, no markdown
+                    - relevant_roles: roles directly needed based on the description
+                    - optional_roles: roles that could help but are not explicitly required
+                    - Descriptions must be concise (20-40 words)
                     """
                     cache_key = hashlib.md5(prompt.encode()).hexdigest()
-                    response_text = cache_result(cache_key, lambda p: model.generate_content(p).text, prompt)
+                    response_text = cache_result(cache_key, generate_content, prompt)
                     st.session_state.main_response = response_text
 
                     parsed_json, success = extract_and_parse_json(response_text)
-                    if success and "job_roles" in parsed_json:
-                        job_list = parsed_json["job_roles"]
-                        st.session_state['job_list'] = [j["role"] for j in job_list]
-                        st.session_state.relevant_job_list = [j["role"] for j in job_list if j["role"].lower() in full_description.lower()]
-                        st.session_state.irrelevant_job_list = [j["role"] for j in job_list if j["role"].lower() not in full_description.lower()]
+                    if success and ("relevant_roles" in parsed_json or "optional_roles" in parsed_json):
+                        relevant = parsed_json.get("relevant_roles", [])
+                        optional = parsed_json.get("optional_roles", [])
+                        all_roles = relevant + optional
+                        st.session_state['job_list'] = [j["role"] for j in all_roles]
+                        st.session_state.relevant_job_list = [j["role"] for j in relevant]
+                        st.session_state.irrelevant_job_list = [j["role"] for j in optional]
                         st.session_state.show_job_list = True
                     else:
                         st.error("Could not identify job roles. Please refine your description.", icon="⚠️")
@@ -343,7 +408,7 @@ def main():
             }}
             """
             cache_key = hashlib.md5(prompt.encode()).hexdigest()
-            response_text = cache_result(cache_key, lambda p: model.generate_content(p).text, prompt)
+            response_text = cache_result(cache_key, generate_content, prompt)
             salary_json, valid = validate_salary_json(extract_and_parse_json(response_text)[0] or {})
             if valid:
                 job_salary = {
@@ -360,7 +425,11 @@ def main():
             df = pd.DataFrame(job_list_salary)
             df = pd.concat([df.drop(['salary_comparison'], axis=1), pd.json_normalize(df['salary_comparison'])], axis=1)
             st.markdown("<h2>Salary Comparison</h2>", unsafe_allow_html=True)
-            st.dataframe(df.style.format({"philippines": "${:,.0f}", "united_states": "${:,.0f}"}), use_container_width=True)
+            display_df = df.copy()
+            for col in ["philippines", "united_states"]:
+                if col in display_df.columns:
+                    display_df[col] = display_df[col].apply(lambda x: f"${x:,.0f}")
+            render_html_table(display_df)
 
     if st.session_state['job_list_salary']:
         st.markdown("<h2>Team Size Configuration</h2>", unsafe_allow_html=True)
@@ -380,13 +449,11 @@ def main():
 
             df = pd.DataFrame(st.session_state['job_list_salary'])
             df = pd.concat([df.drop(['salary_comparison'], axis=1), pd.json_normalize(df['salary_comparison'])], axis=1)
-            st.dataframe(df.style.format({
-                "philippines": "${:,.0f}",
-                "united_states": "${:,.0f}",
-                "ph_cost": "${:,.0f}",
-                "us_cost": "${:,.0f}",
-                "savings": "${:,.0f}"
-            }), use_container_width=True)
+            display_df = df.copy()
+            for col in ["philippines", "united_states", "ph_cost", "us_cost", "savings"]:
+                if col in display_df.columns:
+                    display_df[col] = display_df[col].apply(lambda x: f"${x:,.0f}")
+            render_html_table(display_df)
 
             buffer = io.BytesIO()
             df.to_csv(buffer, index=False)
@@ -408,11 +475,11 @@ def main():
 
             st.markdown("<h2>Refined Job Role Insights</h2>", unsafe_allow_html=True)
             refined_df = df[["job_role", "ph_cost", "us_cost", "savings"]]
-            st.dataframe(refined_df.style.format({
-                "ph_cost": "${:,.0f}",
-                "us_cost": "${:,.0f}",
-                "savings": "${:,.0f}"
-            }), use_container_width=True)
+            display_refined = refined_df.copy()
+            for col in ["ph_cost", "us_cost", "savings"]:
+                if col in display_refined.columns:
+                    display_refined[col] = display_refined[col].apply(lambda x: f"${x:,.0f}")
+            render_html_table(display_refined)
 
             buffer = io.BytesIO()
             refined_df.to_csv(buffer, index=False)
